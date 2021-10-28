@@ -119,13 +119,11 @@ function addDepartment() {
 
 function addRole() {
     var deptChoices = []
-    var deptNum
     db.query('SELECT * FROM department', (error,results)=>{
         if(error) throw error;
         for (let i = 0; i < results.length; i++) {
             deptChoices.push(results[i].name)
         }
-        console.log(deptChoices)
     })
     inquirer.prompt([
         {
@@ -148,27 +146,81 @@ function addRole() {
     .then(data => {
         db.query('SELECT id FROM department WHERE name = ?', data.roleDept, (error,results)=>{
             if(error) throw error;
-            deptNum = results[0].id
-            console.log('ayyyy',deptNum)
-        })
-        db.query('INSERT INTO role (title,salary,department_id) VALUES (?,?,?)',(data.roleName,data.roleSalary,deptNum), (error,results)=>{
-            if(error) throw error;
-            console.log('Role added!')
-            db.query('SELECT * FROM role',(error,results)=>{
+            var deptNum = results[0].id
+            //how can i async this instead of nesting it?
+            db.query('INSERT INTO role (title,salary,department_id) VALUES (?,?,?)',[data.roleName,data.roleSalary,deptNum], (error,results)=>{
                 if(error) throw error;
-                console.table(results)
-                cont()
-                }
-            )
+                console.log('Role added!')
+                db.query('SELECT * FROM role',(error,results)=>{
+                    if(error) throw error;
+                    console.table(results)
+                    cont()
+                    }
+                )
+            })
         })
     })
 }
 
 function addEmployee() {
+    var roleChoices = []
+    db.query('SELECT * FROM role', (error,results)=>{
+        if(error) throw error;
+        for (let i = 0; i < results.length; i++) {
+            roleChoices.push(results[i].title)
+        }
+    })
+    var managerList = []
+    db.query('SELECT * FROM employee WHERE role_id = 1', (error,results)=>{
+        if(error) throw error;
+        for (let i = 0; i < results.length; i++) {
+            managerList.push(results[i].first_name + ' ' + results[i].last_name)
+        }
+    })
     inquirer.prompt([
-
+        {
+            type: 'input',
+            name: 'firstName',
+            message: 'Please enter first name'
+        },
+        {
+            type: 'input',
+            name: 'lastName',
+            message: 'Please enter last name'
+        },
+        {
+            type: 'list',
+            name: 'employeeRole',
+            message: "What is this employee's role?",
+            choices: roleChoices
+        },
+        {
+            type: 'list',
+            name: 'employeeManager',
+            message: "Who is this employee's manager?",
+            choices: managerList
+        }
     ])
     .then(data => {
-        
+        db.query('SELECT id FROM role WHERE title = ?', data.employeeRole, (error,results)=>{
+            if(error) throw error;
+            var roleNum = results[0].id
+
+            db.query('SELECT id FROM employee WHERE first_name = ? AND last_name = ?', [data.employeeManager.split(" ")[0],data.employeeManager.split(" ")[1]], (error,results)=>{
+                if(error) throw error;
+                var managerNum = results[0].id//why array
+
+                db.query('INSERT INTO employee (first_name,last_name,role_id,manager_id) VALUES (?,?,?,?)',[data.firstName,data.lastName,roleNum,managerNum], (error,results)=>{
+                    if(error) throw error;
+                    console.log('Employee added!')
+                    db.query('SELECT * FROM employee',(error,results)=>{
+                        if(error) throw error;
+                        console.table(results)
+                        cont()
+                        }
+                    )
+                })
+            })
+        })
     })
 }
