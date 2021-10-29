@@ -5,12 +5,12 @@ VALUES  ("Management"),
         ("Operations");
 
 INSERT INTO role (title,salary,department_id)
-VALUES  ("Manager",32.50,1),
-        ("Sales Representative",18.50,2),
-        ("Customer Service Representative",22.75,2),
-        ("H.R. Representative",25.00,3),
-        ("Warehouse Guy",12.25,4),
-        ("Forklift Drifter",28.00,4);
+VALUES  ("Manager",120000,1),
+        ("Sales Representative",70000,2),
+        ("Customer Service Representative",75000,2),
+        ("H.R. Representative",90000,3),
+        ("Warehouse Guy",45000,4),
+        ("Forklift Drifter",150,4);
 
 INSERT INTO employee (first_name,last_name,role_id,manager_id)
 VALUES  ("Danielle","LeBeau",1,NULL),

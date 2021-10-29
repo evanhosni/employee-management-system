@@ -14,8 +14,6 @@ const db = mysql.createConnection(
 
 init()//The init that started it all. The spark, if you will. Without it, this program is nothing. You are nothing. This world is but a distant memory in the mind of its creator.
 
-//TODO SELECT x FROM (something other than * so it looks cleaner)
-
 ///////////////////////////////////////////////////////////////////
 //FIND ALL DEPARTMENTS
 const findDepartments = () => {
@@ -103,20 +101,37 @@ const findEmployeeId = (spaghet) => {
     })
 }
 
-//GET BUDGET //TODO - unfinished
-const getBudget = (department) => {
+//GET BUDGET - FIND ROLES BY DEPARTMENT returns a list of all roles in a specified department
+const findRolesByDepartment = (department) => {
     return new Promise((fulfill,reject) => {
-        var budget = 0
-        db.query('SELECT * FROM role WHERE department_id = ?',department,(error,roles)=>{
+        var roleArray = []
+        db.query(`SELECT * FROM role WHERE department_id = ?`,department,(error,results)=>{
             if(error) reject(error);
-            for (let i = 0; i < roles.length; i++) {
-                db.query('SELECT * FROM employee WHERE role_id = ?',roles[i].id,(error,employees)=>{
-                    if(error) reject(error);
-                    budget += (roles[i].salary * employees.length)
-                })
+            for (let i = 0; i < results.length; i++) {
+                roleArray.push(results[i].title)
             }
+            fulfill(roleArray)
         })
-        fulfill(budget)
+    })
+}
+
+//GET BUDGET - FIND ROLE SALARY finds salary of a specified role
+const findRoleSalary = (role) => {
+    return new Promise((fulfill,reject) => {
+        db.query(`SELECT * FROM role WHERE id = ?`,role,(error,results)=>{
+            if(error) reject(error);
+            fulfill(results[0].salary)
+        })
+    })
+}
+
+//GET BUDGET - FIND EMPLOYEES PER ROLE finds amount of employees who share a specified role
+const findEmployeesPerRole = (role) => {
+    return new Promise((fulfill,reject) => {
+        db.query('SELECT * FROM employee WHERE role_id = ?',role,(error,results)=>{
+            if(error) reject(error);
+            fulfill(results.length)
+        })
     })
 }
 
@@ -134,7 +149,7 @@ function init() {
     .then(data => {
         switch(data.init) {
             case 'View All Departments':
-                db.query('SELECT * FROM department',(error,results)=>{
+                db.query('SELECT name AS Department FROM department',(error,results)=>{
                     if(error){
                         console.log(error)
                     } else {
@@ -144,7 +159,7 @@ function init() {
                 })
                 break;
             case 'View All Roles':
-                db.query('SELECT * FROM role',(error,results)=>{
+                db.query('SELECT title AS Role, salary AS Salary, department.name AS Department FROM role JOIN department ON department_id = department.id',(error,results)=>{
                     if(error){
                         console.log(error)
                     } else {
@@ -154,7 +169,12 @@ function init() {
                 })
                 break;
             case 'View All Employees':
-                db.query('SELECT * FROM employee',(error,results)=>{
+
+                db.query(`SELECT CONCAT(a.first_name, " ", a.last_name) AS Name, role.title AS Role, IFNULL(CONCAT(b.first_name, " ", b.last_name),"[None]") AS Manager
+                FROM employee a
+                LEFT JOIN employee b ON b.id = a.manager_id
+                JOIN role ON a.role_id = role.id
+                ORDER BY a.last_name`,(error,results)=>{
                     if(error){
                         console.log(error)
                     } else {
@@ -275,15 +295,15 @@ function cont() {
             type: 'list',
             name: 'cont',
             message: 'Would you like to continue?',
-            choices: ['Continue','Quit']
+            choices: ['[Continue]','[Quit]']
         }
     ])
     .then(data => {
         switch(data.cont){
-            case 'Continue':
+            case '[Continue]':
                 init()
                 break;
-            case 'Quit':
+            case '[Quit]':
                 break;
         }
     })
@@ -302,8 +322,8 @@ function addDepartment() {
     .then(data => {
         db.query('INSERT INTO department (name) VALUES (?)', data.deptName, (error,results)=>{
             if(error) throw error;
-            console.log('Department added!')
-            db.query('SELECT * FROM department',(error,results)=>{
+            console.warn('Department added!')
+            db.query('SELECT name AS Department FROM department',(error,results)=>{
                 if(error) throw error;
                 console.table(results)
                 cont()
@@ -341,8 +361,8 @@ async function addRole() {
 
         db.query('INSERT INTO role (title,salary,department_id) VALUES (?,?,?)',[data.roleName,data.roleSalary,deptNum], (error,results)=>{
             if(error) throw error;
-            console.log('Role added!')
-            db.query('SELECT * FROM role',(error,results)=>{
+            console.warn('Role added!')
+            db.query('SELECT title AS Role, salary AS Salary, department.name AS Department FROM role JOIN department ON department_id = department.id',(error,results)=>{
                 if(error) throw error;
                 console.table(results)
                 cont()
@@ -388,10 +408,14 @@ async function addEmployee() {
         var roleNum = await findRoleId(data.employeeRole);
         var managerNum = await findEmployeeId(data.employeeManager)
 
-        db.query('INSERT INTO employee (first_name,last_name,role_id,manager_id) VALUES (?,?,?,?)',[data.firstName,data.lastName,roleNum,managerNum], (error,results)=>{
+        db.query('INSERT INTO employee (first_name,last_name,role_id,manager_id) VALUES (?,?,?,?)',[data.firstName.trim(),data.lastName.trim(),roleNum,managerNum], (error,results)=>{
             if(error) throw error;
-            console.log('Employee added!')
-            db.query('SELECT * FROM employee',(error,results)=>{
+            console.warn('Employee added!')
+            db.query(`SELECT CONCAT(a.first_name, " ", a.last_name) AS Name, role.title AS Role, IFNULL(CONCAT(b.first_name, " ", b.last_name),"[None]") AS Manager
+            FROM employee a
+            LEFT JOIN employee b ON b.id = a.manager_id
+            JOIN role ON a.role_id = role.id
+            ORDER BY a.last_name`,(error,results)=>{
                 if(error) throw error;
                 console.table(results)
                 cont()
@@ -453,7 +477,12 @@ async function viewByDepartment() {
             for (let i = 0; i < results.length; i++) {
                 rolesInDepartment.push(results[i].id)
             }
-            db.query(`SELECT * FROM employee WHERE role_id IN (${rolesInDepartment})`,(error,results)=>{
+            db.query(`SELECT CONCAT(a.first_name, " ", a.last_name) AS Name, role.title AS Role, IFNULL(CONCAT(b.first_name, " ", b.last_name),"[None]") AS Manager
+            FROM employee a
+            LEFT JOIN employee b ON b.id = a.manager_id
+            JOIN role ON a.role_id = role.id
+            WHERE a.role_id IN (${rolesInDepartment})
+            ORDER BY a.last_name`,(error,results)=>{
                 if(error) throw error;
                 console.table(results)
                 cont()
@@ -479,7 +508,12 @@ async function viewByRole() {
 
         var roleNum = await findRoleId(data.role);
 
-        db.query('SELECT * FROM employee WHERE role_id = ?',roleNum,(error,results)=>{
+        db.query(`SELECT CONCAT(a.first_name, " ", a.last_name) AS Name, role.title AS Role, IFNULL(CONCAT(b.first_name, " ", b.last_name),"[None]") AS Manager
+        FROM employee a
+        LEFT JOIN employee b ON b.id = a.manager_id
+        JOIN role ON a.role_id = role.id
+        WHERE a.role_id = ?
+        ORDER BY a.last_name`,roleNum,(error,results)=>{
             if(error) throw error;
             console.table(results)
             cont()
@@ -504,7 +538,12 @@ async function viewByManager() {
 
         var managerNum = await findEmployeeId(data.manager);
 
-        db.query('SELECT * FROM employee WHERE manager_id = ?',managerNum,(error,results)=>{
+        db.query(`SELECT CONCAT(a.first_name, " ", a.last_name) AS Name, role.title AS Role, IFNULL(CONCAT(b.first_name, " ", b.last_name),"[None]") AS Manager
+        FROM employee a
+        LEFT JOIN employee b ON b.id = a.manager_id
+        JOIN role ON a.role_id = role.id
+        WHERE a.manager_id = ?
+        ORDER BY a.last_name`,managerNum,(error,results)=>{
             if(error) throw error;
             console.table(results)
             cont()
@@ -512,7 +551,7 @@ async function viewByManager() {
     })
 }
 
-//VIEW BUDGETS //TODO - unfinished
+//VIEW BUDGETS
 async function viewBudgets() {
 
     var departmentList = await findDepartments();
@@ -520,21 +559,29 @@ async function viewBudgets() {
     inquirer.prompt([
         {
             type: 'list',
-            name: 'budget',
+            name: 'department',
             message: 'Which budget would you like to view?',
             choices: departmentList
         }
     ])
     .then(async(data) => {
 
-        var budget = await getBudget(await findDeptId(data.budget));
+        var roleList = await findRolesByDepartment(await findDeptId(data.department));
+        var budget = 0
 
-        console.log(budget)
+        for (let i = 0; i < roleList.length; i++) {
+            var roleNum = await findRoleId(roleList[i])
+            var roleSalary = await findRoleSalary(roleNum)
+            var employeesPerRole = await findEmployeesPerRole(roleNum)
+            budget += (roleSalary * employeesPerRole)
+        }
+
+        console.warn("$" + budget + " yearly budget")
         cont()
     })
 }
 
-//UPDATE DEPARTMENT //TODO - unfinished
+//UPDATE DEPARTMENT
 async function updateDepartment() {
 
     var departmentList = await findDepartments();
@@ -545,13 +592,20 @@ async function updateDepartment() {
             name: 'department',
             message: 'Which department would you like to update?',
             choices: departmentList
+        },
+        {
+            type: 'input',
+            name: 'name',
+            message: 'What would you like to rename this department?'
         }
     ])
-    .then(data => {
-        db.query('update FROM department WHERE name = ?',data.department,(error,results)=>{
+    .then(async(data) => {
+
+        var deptNum = await findDeptId(data.department);
+        db.query(`UPDATE department SET name = '${data.name}' WHERE id = ${deptNum}`,(error,results)=>{
             if(error) throw error;
-            console.log(data.update + ' department updated!')
-            db.query('SELECT * FROM department',(error,results)=>{
+            console.warn('Department updated!')
+            db.query('SELECT name AS Department FROM department',(error,results)=>{
                 if(error) throw error;
                 console.table(results)
                 cont()
@@ -561,7 +615,7 @@ async function updateDepartment() {
     })
 }
 
-//UPDATE ROLE //TODO - unfinished
+//UPDATE ROLE
 async function updateRole() {
 
     var roleList = await findRoles();
@@ -578,7 +632,7 @@ async function updateRole() {
             type: 'list',
             name: 'property',
             message: 'Which property would you like to change?',
-            choices: ['Title','Salary','Department']
+            choices: ['Role','Salary','Department']
         }
     ])
     .then(async(data) => {
@@ -586,20 +640,19 @@ async function updateRole() {
         var roleNum = await findRoleId(data.role);
 
         switch(data.property) {
-            case 'Title':
+            case 'Role':
                 inquirer.prompt([
                     {
                         type: 'input',
                         name: 'title',
-                        message: 'Please enter a new Title'
+                        message: 'Please enter a new title'
                     }
                 ])
                 .then(data => {
-                    console.log(data.title + roleNum)
-                    db.query("UPDATE role SET title = ? WHERE id = ?",(data.title,roleNum),(error,results)=>{
+                    db.query(`UPDATE role SET title = '${data.title}' WHERE id = ${roleNum}`,(error,results)=>{
                         if(error) throw error;
-                        console.log('Role updated!')
-                        db.query('SELECT * FROM role',(error,results)=>{
+                        console.warn('Role updated!')
+                        db.query('SELECT title AS Role, salary AS Salary, department.name AS Department FROM role JOIN department ON department_id = department.id',(error,results)=>{
                             if(error) throw error;
                             console.table(results)
                             cont()
@@ -613,14 +666,14 @@ async function updateRole() {
                     {
                         type: 'input',
                         name: 'salary',
-                        message: 'Please enter a new Salary'
+                        message: 'Please enter a new salary'
                     }
                 ])
                 .then(data => {
-                    db.query('UPDATE role SET salary = ? WHERE id = ?',(data.salary,roleNum),(error,results)=>{
+                    db.query(`UPDATE role SET salary = '${data.salary}' WHERE id = ${roleNum}`,(error,results)=>{
                         if(error) throw error;
-                        console.log('Role updated!')
-                        db.query('SELECT * FROM role',(error,results)=>{
+                        console.warn('Role updated!')
+                        db.query('SELECT title AS Role, salary AS Salary, department.name AS Department FROM role JOIN department ON department_id = department.id',(error,results)=>{
                             if(error) throw error;
                             console.table(results)
                             cont()
@@ -640,12 +693,12 @@ async function updateRole() {
                 ])
                 .then(async(data) => {
 
-                    var deptNum = await findDeptId();
+                    var deptNum = await findDeptId(data.department);
 
-                    db.query('UPDATE role SET department_id = ? WHERE id = ?',(deptNum,roleNum),(error,results)=>{
+                    db.query(`UPDATE role SET department_id = ${deptNum} WHERE id = ${roleNum}`,(error,results)=>{
                         if(error) throw error;
-                        console.log('Role updated!')
-                        db.query('SELECT * FROM role',(error,results)=>{
+                        console.warn('Role updated!')
+                        db.query('SELECT title AS Role, salary AS Salary, department.name AS Department FROM role JOIN department ON department_id = department.id',(error,results)=>{
                             if(error) throw error;
                             console.table(results)
                             cont()
@@ -658,7 +711,123 @@ async function updateRole() {
     })
 }
 
-//UPDATE EMPLOYEE //TODO - unfinished
+//UPDATE EMPLOYEE
+async function updateEmployee() {
+
+    var employeeList = await findEmployees();
+    var roleList = await findRoles();
+    var managerList = await findManagers();
+
+    inquirer.prompt([
+        {
+            type: 'list',
+            name: 'employee',
+            message: 'Which employee would you like to update?',
+            choices: employeeList
+        },
+        {
+            type: 'list',
+            name: 'property',
+            message: 'Which property would you like to change?',
+            choices: ['Name','Role','Manager']
+        }
+    ])
+    .then(async(data) => {
+
+        var employeeNum = await findEmployeeId(data.employee);
+
+        switch(data.property) {
+            case 'Name':
+                inquirer.prompt([
+                    {
+                        type: 'input',
+                        name: 'firstName',
+                        message: 'Please enter a new first name'
+                    },
+                    {
+                        type: 'input',
+                        name: 'lastName',
+                        message: 'Please enter a new last name'
+                    }
+                ])
+                .then(data => {
+                    db.query(`UPDATE employee SET first_name = '${data.firstName.trim()}', last_name = '${data.lastName.trim()}' WHERE id = ${employeeNum}`,(error,results)=>{
+                        if(error) throw error;
+                        console.warn('Employee updated!')
+                        db.query(`SELECT CONCAT(a.first_name, " ", a.last_name) AS Name, role.title AS Role, IFNULL(CONCAT(b.first_name, " ", b.last_name),"[None]") AS Manager
+                        FROM employee a
+                        LEFT JOIN employee b ON b.id = a.manager_id
+                        JOIN role ON a.role_id = role.id
+                        ORDER BY a.last_name`,(error,results)=>{
+                            if(error) throw error;
+                            console.table(results)
+                            cont()
+                            }
+                        )
+                    })
+                })
+                break;
+            case 'Role':
+                inquirer.prompt([
+                    {
+                        type: 'list',
+                        name: 'role',
+                        message: 'Please select a new title',
+                        choices: roleList
+                    }
+                ])
+                .then(async(data) => {
+
+                    var roleNum = await findRoleId(data.role)
+
+                    db.query(`UPDATE employee SET role_id = '${roleNum}' WHERE id = ${employeeNum}`,(error,results)=>{
+                        if(error) throw error;
+                        console.warn('Employee updated!')
+                        db.query(`SELECT CONCAT(a.first_name, " ", a.last_name) AS Name, role.title AS Role, IFNULL(CONCAT(b.first_name, " ", b.last_name),"[None]") AS Manager
+                        FROM employee a
+                        LEFT JOIN employee b ON b.id = a.manager_id
+                        JOIN role ON a.role_id = role.id
+                        ORDER BY a.last_name`,(error,results)=>{
+                            if(error) throw error;
+                            console.table(results)
+                            cont()
+                            }
+                        )
+                    })
+                })
+                break;
+            case 'Manager':
+                inquirer.prompt([
+                    {
+                        type: 'list',
+                        name: 'manager',
+                        message: 'Please select a new manager',
+                        choices: managerList
+                    }
+                ])
+                .then(async(data) => {
+
+                    var managerNum = await findEmployeeId(data.manager)
+
+                    db.query(`UPDATE employee SET manager_id = '${managerNum}' WHERE id = ${employeeNum}`,(error,results)=>{
+                        if(error) throw error;
+                        console.warn('Employee updated!')
+                        db.query(`SELECT CONCAT(a.first_name, " ", a.last_name) AS Name, role.title AS Role, IFNULL(CONCAT(b.first_name, " ", b.last_name),"[None]") AS Manager
+                        FROM employee a
+                        LEFT JOIN employee b ON b.id = a.manager_id
+                        JOIN role ON a.role_id = role.id
+                        ORDER BY a.last_name`,(error,results)=>{
+                            if(error) throw error;
+                            console.table(results)
+                            cont()
+                            }
+                        )
+                    })
+                })
+                break;
+        }
+    })
+}
 
 //DELETE DEPARTMENT
 async function deleteDepartment() {
@@ -676,8 +845,8 @@ async function deleteDepartment() {
     .then(data => {
         db.query('DELETE FROM department WHERE name = ?',data.delete,(error,results)=>{
             if(error) throw error;
-            console.log(data.delete + ' department deleted!')
-            db.query('SELECT * FROM department',(error,results)=>{
+            console.warn(data.delete + ' department deleted!')
+            db.query('SELECT name AS Department FROM department',(error,results)=>{
                 if(error) throw error;
                 console.table(results)
                 cont()
@@ -703,8 +872,8 @@ async function deleteRole() {
     .then(data => {
         db.query('DELETE FROM role WHERE title = ?',data.delete,(error,results)=>{
             if(error) throw error;
-            console.log(data.delete + ' role deleted!')
-            db.query('SELECT * FROM role',(error,results)=>{
+            console.warn(data.delete + ' role deleted!')
+            db.query('SELECT title AS Role, salary AS Salary, department.name AS Department FROM role JOIN department ON department_id = department.id',(error,results)=>{
                 if(error) throw error;
                 console.table(results)
                 cont()
@@ -733,8 +902,12 @@ async function deleteEmployee() {
 
         db.query('DELETE FROM employee WHERE id = ?',employeeNum,(error,results)=>{
             if(error) throw error;
-            console.log(data.delete + ' employee deleted!')
-            db.query('SELECT * FROM employee',(error,results)=>{
+            console.warn(data.delete + ' employee deleted!')
+            db.query(`SELECT CONCAT(a.first_name, " ", a.last_name) AS Name, role.title AS Role, IFNULL(CONCAT(b.first_name, " ", b.last_name),"[None]") AS Manager
+            FROM employee a
+            LEFT JOIN employee b ON b.id = a.manager_id
+            JOIN role ON a.role_id = role.id
+            ORDER BY a.last_name`,(error,results)=>{
                 if(error) throw error;
                 console.table(results)
                 cont()
@@ -743,3 +916,5 @@ async function deleteEmployee() {
         })
     })
 }
+
+//TODO - deleting managers issue
