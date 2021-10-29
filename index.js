@@ -14,6 +14,8 @@ const db = mysql.createConnection(
 
 init()//The init that started it all. The spark, if you will. Without it, this program is nothing. You are nothing. This world is but a distant memory in the mind of its creator.
 
+//TODO SELECT x FROM (something other than * so it looks cleaner)
+
 ///////////////////////////////////////////////////////////////////
 //FIND ALL DEPARTMENTS
 const findDepartments = () => {
