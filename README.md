@@ -24,7 +24,9 @@ Upon cloning this repo, be sure to run "npm i" to install the necessary dependen
 
 ## Usage
 
-Simply follow the prompts in your terminal to interact with your company database.
+Simply follow the prompts in your terminal to interact with your company database. See below video for usage example.
+
+![Employee Management System](./assets/employee-management-system-usage.gif)
     
 ---
 
